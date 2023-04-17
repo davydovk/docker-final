@@ -38,11 +38,11 @@ services:
       - ./gitlab/gitlab_home/data:/var/opt/gitlab
 
   rocketchat:
-    container_name: rocketchat
-    image: rocket.chat:1.0.1
+    image: registry.rocket.chat/rocketchat/rocket.chat:${RELEASE:-latest}
     restart: always
     labels:
       traefik.enable: "true"
+      traefik.http.routers.rocketchat.rule: Host(`${DOMAIN}`)
       traefik.http.routers.rocketchat.tls: "true"
       traefik.http.routers.rocketchat.entrypoints: https
       traefik.http.routers.rocketchat.tls.certresolver: le
@@ -63,16 +63,10 @@ services:
       - ${PORT:-3000}
     ports:
       - "${BIND_IP:-0.0.0.0}:${HOST_PORT:-3000}:${PORT:-3000}"
-    networks:
-      - mongo
 
   mongodb:
-    container_name: mongo
-    image: mongo:3.4.20
+    image: docker.io/bitnami/mongodb:${MONGODB_VERSION:-5.0}
     restart: always
-    command: mongod --replSet rs0 --port 27017
-    ports:
-      - "27017:27017"
     volumes:
       - mongodb_data:/bitnami/mongodb
     environment:
@@ -84,8 +78,3 @@ services:
       MONGODB_ADVERTISED_HOSTNAME: ${MONGODB_ADVERTISED_HOSTNAME:-mongodb}
       MONGODB_ENABLE_JOURNAL: ${MONGODB_ENABLE_JOURNAL:-true}
       ALLOW_EMPTY_PASSWORD: ${ALLOW_EMPTY_PASSWORD:-yes}
-    networks:
-      - mongo
-
-networks:
-  mongo:
