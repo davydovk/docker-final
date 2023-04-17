@@ -1,0 +1,91 @@
+volumes:
+  mongodb_data: { driver: local }
+
+services:
+  ldap:
+    container_name: ldap
+    image: osixia/openldap
+    restart: always
+    env_file:
+      - ".env"
+    environment:
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_PASSWORD}
+    volumes:
+      - ./ldap/data/slapd/database:/var/lib/ldap
+      - ./ldap/data/slapd/config:/etc/ldap/slapd.d
+
+  ldap_admin:
+    container_name: ldap_admin
+    image: osixia/phpldapadmin
+    restart: always
+    ports:
+      - "6443:443"
+    env_file:
+      - ".env"
+    environment:
+      - PHPLDAPADMIN_LDAP_HOSTS=${LDAP_HOST}
+
+  gitlab:
+    container_name: gitlab
+    image: gitlab/gitlab-ce
+    restart: always
+    ports:
+      - "8085:80"
+    volumes:
+      - ./gitlab/gitlab_home/config:/etc/gitlab
+      - ./gitlab/gitlab_home/logs:/var/log/gitlab
+      - ./gitlab/gitlab_home/data:/var/opt/gitlab
+
+  rocketchat:
+    container_name: rocketchat
+    image: rocket.chat:1.0.1
+    restart: always
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.rocketchat.tls: "true"
+      traefik.http.routers.rocketchat.entrypoints: https
+      traefik.http.routers.rocketchat.tls.certresolver: le
+    environment:
+      MONGO_URL: "${MONGO_URL:-\
+        mongodb://${MONGODB_ADVERTISED_HOSTNAME:-mongodb}:${MONGODB_INITIAL_PRIMARY_PORT_NUMBER:-27017}/\
+        ${MONGODB_DATABASE:-rocketchat}?replicaSet=${MONGODB_REPLICA_SET_NAME:-rs0}}"
+      MONGO_OPLOG_URL: "${MONGO_OPLOG_URL:\
+        -mongodb://${MONGODB_ADVERTISED_HOSTNAME:-mongodb}:${MONGODB_INITIAL_PRIMARY_PORT_NUMBER:-27017}/\
+        local?replicaSet=${MONGODB_REPLICA_SET_NAME:-rs0}}"
+      ROOT_URL: ${ROOT_URL:-http://localhost:${HOST_PORT:-3000}}
+      PORT: ${PORT:-3000}
+      DEPLOY_METHOD: docker
+      DEPLOY_PLATFORM: ${DEPLOY_PLATFORM}
+    depends_on:
+      - mongodb
+    expose:
+      - ${PORT:-3000}
+    ports:
+      - "${BIND_IP:-0.0.0.0}:${HOST_PORT:-3000}:${PORT:-3000}"
+    networks:
+      - mongo
+
+  mongodb:
+    container_name: mongo
+    image: mongo:3.4.20
+    restart: always
+    command: mongod --replSet rs0 --port 27017
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/bitnami/mongodb
+    environment:
+      MONGODB_REPLICA_SET_MODE: primary
+      MONGODB_REPLICA_SET_NAME: ${MONGODB_REPLICA_SET_NAME:-rs0}
+      MONGODB_PORT_NUMBER: ${MONGODB_PORT_NUMBER:-27017}
+      MONGODB_INITIAL_PRIMARY_HOST: ${MONGODB_INITIAL_PRIMARY_HOST:-mongodb}
+      MONGODB_INITIAL_PRIMARY_PORT_NUMBER: ${MONGODB_INITIAL_PRIMARY_PORT_NUMBER:-27017}
+      MONGODB_ADVERTISED_HOSTNAME: ${MONGODB_ADVERTISED_HOSTNAME:-mongodb}
+      MONGODB_ENABLE_JOURNAL: ${MONGODB_ENABLE_JOURNAL:-true}
+      ALLOW_EMPTY_PASSWORD: ${ALLOW_EMPTY_PASSWORD:-yes}
+    networks:
+      - mongo
+
+networks:
+  mongo:
